@@ -41,11 +41,8 @@ def parse_cameras(cameras_arr):
 
 def parse_onedrive_response(
     filepath,
-    response_extension=RESPONSE_EXTENSION,
-    arguments_extension=ARGUMENTS_EXTENSION,
 ):
     with open(filepath, "r") as fl_in:
-        logger.info("Opened: {}".format(filepath))
         args_dict = {
             "skipdownload": None,
             # "concat": None,
@@ -63,13 +60,14 @@ def parse_onedrive_response(
                 value = parse_cameras(value)
             elif key == "upload" and value != "":
                 value = literal_eval(value)
+            elif key == "videoname":
+                value = value.replace(" ", "_")
 
             args_dict[key] = value
         
         out_filepath = argname_from_response(filepath)
         with open(out_filepath, "w") as fl_out:
             yaml.safe_dump(args_dict, fl_out, indent=2)
-    logger.info("Parsed: {}".format(filepath))
     return out_filepath
 
 
@@ -97,8 +95,6 @@ def parse_responses_and_return_latest(
     # latest = get_latest_arguments(onedrive_folder)
     if latest is None:
         return None
-
-    logger.info("Latest file: {}".format(latest))
 
     # deadline = datetime.now() - PROCESS_DEADLINE
     # mod_time = datetime.fromtimestamp(os.path.getmtime(latest))
