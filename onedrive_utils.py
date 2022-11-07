@@ -3,6 +3,7 @@ import os
 from ast import literal_eval
 import yaml
 from datetime import timedelta, datetime
+import logging
 
 # Has to be hardcoded because of non-unicode chars
 ONEDRIVE_FOLDER="D:\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_commands"
@@ -15,9 +16,10 @@ PARSED_KEYWORDS = [
     "cameras",
     "videoname",
 ]
-PROCESS_DEADLINE=timedelta(hours=1)
+# PROCESS_DEADLINE=timedelta(seconds=100)
 DELETE_DEADLINE=timedelta(days=7)
 
+logger = logging.getLogger("HikLoadHandler")
 
 def argname_from_response(response_name, response_extension=RESPONSE_EXTENSION, arguments_extension=ARGUMENTS_EXTENSION):
     dirname, basename = os.path.split(response_name)
@@ -37,8 +39,13 @@ def parse_cameras(cameras_arr):
     return ",".join(literal_eval(cameras_arr))
 
 
-def parse_onedrive_response(filepath):
+def parse_onedrive_response(
+    filepath,
+    response_extension=RESPONSE_EXTENSION,
+    arguments_extension=ARGUMENTS_EXTENSION,
+):
     with open(filepath, "r") as fl_in:
+        logger.info("Opened: {}".format(filepath))
         args_dict = {
             "skipdownload": None,
             # "concat": None,
@@ -54,13 +61,16 @@ def parse_onedrive_response(filepath):
                 value = "{}T{}".format(date, time)
             elif key == "cameras":
                 value = parse_cameras(value)
-            elif key == "upload":
+            elif key == "upload" and value != "":
                 value = literal_eval(value)
 
             args_dict[key] = value
         
-        with open(argname_from_response(filepath), "w") as fl_out:
+        out_filepath = argname_from_response(filepath)
+        with open(out_filepath, "w") as fl_out:
             yaml.safe_dump(args_dict, fl_out, indent=2)
+    logger.info("Parsed: {}".format(filepath))
+    return out_filepath
 
 
 def parse_responses_and_return_latest(
@@ -76,26 +86,32 @@ def parse_responses_and_return_latest(
     
     responses.sort(key=lambda x: os.path.getmtime(x))
 
+    latest = None
     for response in responses:
-        try:
-            parse_onedrive_response(response)
-            os.remove(response)
-        except:
-            pass
-
-    latest = get_latest_arguments(onedrive_folder)
+        latest = parse_onedrive_response(response)
+        os.remove(response)
+        
+        # Only parse one response at a time
+        break
+        
+    # latest = get_latest_arguments(onedrive_folder)
     if latest is None:
         return None
 
-    deadline = datetime.now() - PROCESS_DEADLINE
-    mod_time = datetime.fromtimestamp(os.path.getmtime(latest))
-    if mod_time < deadline:
-        return None
-    else:
-        return latest
+    logger.info("Latest file: {}".format(latest))
+
+    # deadline = datetime.now() - PROCESS_DEADLINE
+    # mod_time = datetime.fromtimestamp(os.path.getmtime(latest))
+    # logger.info("Latest mod_time: {}".format(mod_time))
+    # logger.info("Deadline: {}".format(deadline))
+
+    # if mod_time < deadline:
+    #     return None
+    # else:
+    return latest
 
 
-def get_latest_arguments(
+def _get_latest_arguments(
     folder=ONEDRIVE_FOLDER,
     arguments_extension=ARGUMENTS_EXTENSION
 ):
