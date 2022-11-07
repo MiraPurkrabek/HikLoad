@@ -6,3 +6,6 @@ hikload.egg-info
 .vscode
 build
 *url.txt
+
+passwords/passwords.yml
+*.log

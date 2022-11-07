@@ -1,0 +1,31 @@
+version: 1
+formatters:
+  simple:
+    format: '%(asctime)s - %(name)s: %(levelname)s - %(message)s'
+    # format: '%(name)s - %(levelname)s: %(message)s'
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: simple
+    stream: ext://sys.stdout
+  logfile:
+    level: INFO
+    class: logging.FileHandler
+    formatter: simple
+    filename: debug.log
+    mode: w
+  rotatingfile:
+    level: INFO
+    class: logging.handlers.RotatingFileHandler
+    formatter: simple
+    filename: HikLoad.log
+loggers:
+  HikLoadHandler:
+    level: INFO
+    handlers: [rotatingfile]
+    propagate: False
+  hikload:
+    level: INFO
+    handlers: [rotatingfile]
+    propagate: False
