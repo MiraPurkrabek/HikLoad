@@ -29,13 +29,13 @@ def concat_channel_videos(channel_metadata: dict, cid, args):
     logger.debug("Created temporary txt file for videos concatenation")
     
     if args.videoname != "":
-        outname = "{}_{}.{}".format(
+        outname = "{}_{}_concat.{}".format(
             args.videoname,
             cid,
             args.videoformat
         )
     else:
-        outname = "{}_{}.{}".format(
+        outname = "{}_{}_concat.{}".format(
             channel_metadata["startTime"].replace("-", "").replace(":", "").replace("Z", "").replace("T", ""),
             cid,
             args.videoformat
@@ -90,7 +90,7 @@ def cut_video(video_name, channel_metadata: dict):
     trim_start =  starttime - minstarttime 
     
     logger.debug("Triming video {}".format(video_name))
-    outname = video_name.replace(".", "_cut.")
+    outname = video_name.replace("_concat", "")
     (
         ffmpeg
         .input(video_name, ss=trim_start, t=channel_metadata["duration"])

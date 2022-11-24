@@ -4,6 +4,7 @@ import signal
 import sys
 import os
 import yaml
+import traceback
 
 from hikload.download import run, parse_args
 from hikload.__main__ import main_ui
@@ -29,19 +30,35 @@ def main():
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     
-    cleanup_old_files()
-    cleanup_old_files(folder="Downloads")
+    try:
+        cleanup_old_files()
+        cleanup_old_files(folder="Downloads")
+    except Exception as e:
+        logger.exception("Old files cleaning up threw error")
+        raise e
     logger.debug("Old files cleaned up")
     
-    if len(sys.argv) < 2 :
-        arg_str = argfile_to_argstr(parse_responses_and_return_latest())
-        if arg_str is None:
-            logger.info("No new file to process")
-            return
-        else:
-            sys.argv.extend(arg_str.split())
-    args = parse_args()
+    try:
+        if len(sys.argv) < 2 :
+            arg_str = argfile_to_argstr(parse_responses_and_return_latest())
+            if arg_str is None:
+                logger.info("No new file to process")
+                return
+            else:
+                sys.argv.extend(arg_str.split())
+    except Exception as e:
+        logger.exception("Argfile parsing threw error")
+        raise e
+                  
+    logger.debug("Argfile parsed")
 
+    try:
+        args = parse_args()
+    except Exception as e:
+        logger.exception("Args parsing threw error")
+        raise e
+
+        
     logger.debug("Args parsed")
     # Load default password from the file
     try:
@@ -77,6 +94,9 @@ def main():
     except KeyboardInterrupt:
         logging.info("Exited by user")
         sys.exit(0)
+    except Exception as e:
+        logger.exception("Run threw error")
+        raise e
 
     for filename in output_filenames:
         upload_to_onedrive(filename)

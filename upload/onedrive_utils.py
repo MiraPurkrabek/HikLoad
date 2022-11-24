@@ -85,6 +85,8 @@ def parse_responses_and_return_latest(
     ONEDRIVE_COMMANDS_FOLDER=ONEDRIVE_COMMANDS_FOLDER,
     extension=RESPONSE_EXTENSION,
 ):
+    logger.debug("Parsing responses")
+    
     # Get unparsed responses files
     responses = []
     for f in os.listdir(ONEDRIVE_COMMANDS_FOLDER):
@@ -135,6 +137,7 @@ def _get_latest_arguments(
 
 
 def argfile_to_argstr(filepath, arguments_extension=ARGUMENTS_EXTENSION):
+    logger.debug("Translating argfile to argstr")
     if filepath is None:
         return None
     assert filepath.endswith(arguments_extension)
