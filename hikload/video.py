@@ -2,11 +2,14 @@ import ffmpeg
 import os
 import logging
 
+import time
 from datetime import datetime
 
-logger = logging.getLogger('hikload')
+logger = logging.getLogger('VideoHandler')
 
 def concat_channel_videos(channel_metadata: dict, cid, args):
+    start_time = time.perf_counter()
+
     # Create temporary text file as the FFmpeg requires it
     with open("tmp_list.txt", "w") as fl:
 
@@ -22,26 +25,30 @@ def concat_channel_videos(channel_metadata: dict, cid, args):
                     has_audio = True
                     break
             audio_codec = audio_codec and has_audio
+
+    logger.debug("Created temporary txt file for videos concatenation")
     
     if args.videoname != "":
-        outname = "{}-{}.{}".format(
+        outname = "{}_{}.{}".format(
             args.videoname,
             cid,
             args.videoformat
         )
     else:
-        outname = "{}-{}.{}".format(
+        outname = "{}_{}.{}".format(
             channel_metadata["startTime"].replace("-", "").replace(":", "").replace("Z", "").replace("T", ""),
             cid,
             args.videoformat
         )
 
+    logger.debug("Concatenating {:d} videos of channel {}".format(len(channel_metadata['filenames']), cid))
     try:
         (
             ffmpeg
             .input('tmp_list.txt', f='concat', safe=0)
             .output(outname, codec='copy')
             .overwrite_output()
+            .global_args('-loglevel', 'error')
             .run()
         )
     except ffmpeg._run.Error:
@@ -53,6 +60,7 @@ def concat_channel_videos(channel_metadata: dict, cid, args):
             .input('tmp_list.txt', f='concat', safe=0)
             .output(outname, vcodec='copy')
             .overwrite_output()
+            .global_args('-loglevel', 'error')
             .run()
         )
 
@@ -61,11 +69,19 @@ def concat_channel_videos(channel_metadata: dict, cid, args):
     for filename in channel_metadata["filenames"]:
         os.remove(filename)
 
-    logging.debug("Recordings of the channel {} concatenated into video {}".format(cid, outname))
+    end_time = time.perf_counter()
+    run_time = end_time - start_time
+    logger.debug("Recordings ({:d}) of the channel '{}' concatenated into video '{}' in {:.2f} seconds".format(
+            len(channel_metadata['filenames']),
+            cid,
+            outname,
+            run_time
+    ))
     return outname
 
 
 def cut_video(video_name, channel_metadata: dict):
+    start_time = time.perf_counter()
     # Cut videos to required duration
     starttime = datetime.strptime(
         channel_metadata["startTime"], "%Y-%m-%dT%H:%M:%SZ")
@@ -73,6 +89,7 @@ def cut_video(video_name, channel_metadata: dict):
         channel_metadata["minStartTime"], "%Y-%m-%dT%H:%M:%SZ")
     trim_start =  starttime - minstarttime 
     
+    logger.debug("Triming video {}".format(video_name))
     outname = video_name.replace(".", "_cut.")
     (
         ffmpeg
@@ -86,5 +103,7 @@ def cut_video(video_name, channel_metadata: dict):
     # Clean up after yourself
     os.remove(video_name)
 
-    logging.debug("Video {} trimed into video".format(video_name, outname))
+    end_time = time.perf_counter()
+    run_time = end_time - start_time
+    logger.debug("Video {} trimed into video {} in {:.2f} seconds".format(video_name, outname, run_time))
     return outname

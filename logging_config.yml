@@ -16,16 +16,25 @@ handlers:
     filename: debug.log
     mode: w
   rotatingfile:
-    level: INFO
-    class: logging.handlers.RotatingFileHandler
+    level: NOTSET
+    class: logging.handlers.TimedRotatingFileHandler
+    backupCount: 7
     formatter: simple
-    filename: HikLoad.log
+    filename: logs/HikLoad.log
 loggers:
   HikLoadHandler:
-    level: INFO
+    level: DEBUG
+    handlers: [rotatingfile]
+    propagate: False
+  VideoHandler:
+    level: DEBUG
+    handlers: [rotatingfile]
+    propagate: False
+  OnedriveUtils:
+    level: DEBUG
     handlers: [rotatingfile]
     propagate: False
   hikload:
-    level: INFO
+    level: DEBUG
     handlers: [rotatingfile]
     propagate: False

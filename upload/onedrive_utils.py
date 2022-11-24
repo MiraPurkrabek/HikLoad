@@ -1,12 +1,14 @@
 import sys
 import os
+import shutil
 from ast import literal_eval
 import yaml
 from datetime import timedelta, datetime
 import logging
 
 # Has to be hardcoded because of non-unicode chars
-ONEDRIVE_FOLDER="D:\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_commands"
+ONEDRIVE_COMMANDS_FOLDER="D:\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_commands"
+ONEDRIVE_UPLOADS_FOLDER="D:\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_uploads"
 
 RESPONSE_EXTENSION=".resp"
 ARGUMENTS_EXTENSION=".yml"
@@ -19,7 +21,15 @@ PARSED_KEYWORDS = [
 # PROCESS_DEADLINE=timedelta(seconds=100)
 DELETE_DEADLINE=timedelta(days=7)
 
-logger = logging.getLogger("HikLoadHandler")
+CAMERA_TRANSLATION = {
+    "EAST": "101",
+    "SOUTH": "201",
+    "WEST": "301",
+    "NORTH": "401",
+    "TOP": "501",
+}
+
+logger = logging.getLogger("OnedriveUtils")
 
 def argname_from_response(response_name, response_extension=RESPONSE_EXTENSION, arguments_extension=ARGUMENTS_EXTENSION):
     dirname, basename = os.path.split(response_name)
@@ -44,9 +54,9 @@ def parse_onedrive_response(
 ):
     with open(filepath, "r") as fl_in:
         args_dict = {
-            "skipdownload": None,
-            # "concat": None,
-            # "trim": None,
+            # "skipdownload": None,
+            "concat": None,
+            "trim": None,
         }
         for line in fl_in.readlines():
             key, value = line.strip().split("?")
@@ -72,13 +82,13 @@ def parse_onedrive_response(
 
 
 def parse_responses_and_return_latest(
-    onedrive_folder=ONEDRIVE_FOLDER,
+    ONEDRIVE_COMMANDS_FOLDER=ONEDRIVE_COMMANDS_FOLDER,
     extension=RESPONSE_EXTENSION,
 ):
     # Get unparsed responses files
     responses = []
-    for f in os.listdir(onedrive_folder):
-        f_path = os.path.join(onedrive_folder, f)
+    for f in os.listdir(ONEDRIVE_COMMANDS_FOLDER):
+        f_path = os.path.join(ONEDRIVE_COMMANDS_FOLDER, f)
         if os.path.isfile(f_path) and f_path.endswith(extension):
             responses.append(f_path)
     
@@ -92,7 +102,7 @@ def parse_responses_and_return_latest(
         # Only parse one response at a time
         break
         
-    # latest = get_latest_arguments(onedrive_folder)
+    # latest = get_latest_arguments(ONEDRIVE_COMMANDS_FOLDER)
     if latest is None:
         return None
 
@@ -108,7 +118,7 @@ def parse_responses_and_return_latest(
 
 
 def _get_latest_arguments(
-    folder=ONEDRIVE_FOLDER,
+    folder=ONEDRIVE_COMMANDS_FOLDER,
     arguments_extension=ARGUMENTS_EXTENSION
 ):
     # Sort by modification date (newest first)
@@ -146,15 +156,32 @@ def argfile_to_argstr(filepath, arguments_extension=ARGUMENTS_EXTENSION):
 
 
 def cleanup_old_files(
-    folder=ONEDRIVE_FOLDER,
+    folder=ONEDRIVE_COMMANDS_FOLDER,
     deadline=DELETE_DEADLINE
 ):
+    logger.debug("Cleaning up old files in folder '{:s}' with deadline {}".format(folder, deadline))
     for f in os.listdir(folder):
         f_path = os.path.join(folder, f)
         if os.path.isfile(f_path):
             mod_time = datetime.fromtimestamp(os.path.getmtime(f_path))
             if mod_time < (datetime.now() - deadline):
                 os.remove(f_path) 
+
+
+def upload_to_onedrive(file_path):
+    logger.debug("Uploading '{:s}' to OneDrive".format(file_path))
+    cleanup_old_files(folder=ONEDRIVE_UPLOADS_FOLDER)
+    _, new_name = os.path.split(file_path)
+    
+    # Translate channel IDs to camera names
+    for camera_name, cid in CAMERA_TRANSLATION.items():
+        new_name = new_name.replace("_"+cid, "_"+camera_name[0])
+
+    # Copy to OneDrive folder
+    dst = os.path.join(
+        ONEDRIVE_UPLOADS_FOLDER, new_name
+    )
+    shutil.copyfile(file_path, dst)
 
 
 if __name__ == "__main__":
