@@ -9,3 +9,4 @@ build
 
 passwords/passwords.yml
 *.log
+logs/

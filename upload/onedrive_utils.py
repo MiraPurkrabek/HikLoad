@@ -4,6 +4,7 @@ import shutil
 from ast import literal_eval
 import yaml
 from datetime import timedelta, datetime
+import pytz
 import logging
 
 # Has to be hardcoded because of non-unicode chars
@@ -30,6 +31,13 @@ CAMERA_TRANSLATION = {
 }
 
 logger = logging.getLogger("OnedriveUtils")
+
+
+def is_dst(dt, timezone="Europe/Prague"):
+    timezone = pytz.timezone(timezone)
+    timezone_aware_date = timezone.localize(dt, is_dst=None)
+    return timezone_aware_date.tzinfo._dst.seconds != 0
+
 
 def argname_from_response(response_name, response_extension=RESPONSE_EXTENSION, arguments_extension=ARGUMENTS_EXTENSION):
     dirname, basename = os.path.split(response_name)
@@ -63,9 +71,20 @@ def parse_onedrive_response(
             key = key.lower()
 
             if key.endswith("time"):
+                # Parse for missing zeros
                 date, time = value.split("T")
                 time = parse_time(time)
                 value = "{}T{}".format(date, time)
+                
+                # If DST (daylight savings time), recompute
+                dt = datetime.fromisoformat(value)
+                if is_dst(dt):
+                    dt = dt - timedelta(hours=1)
+                    logger.debug("DST detected, changing time to {:s}".format(dt.isoformat()))
+                else:
+                    logger.debug("No DST detected, keeping time as {:s}".format(dt.isoformat()))
+                value = dt.isoformat()
+
             elif key == "cameras":
                 value = parse_cameras(value)
             elif key == "upload" and value != "":
