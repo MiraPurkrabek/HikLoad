@@ -8,5 +8,6 @@ build
 *url.txt
 
 passwords/passwords.yml
+passwords/*.json
 *.log
 logs/

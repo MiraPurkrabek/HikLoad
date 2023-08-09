@@ -17,9 +17,10 @@ handlers:
     mode: w
   rotatingfile:
     level: NOTSET
-    class: logging.handlers.TimedRotatingFileHandler
+    class: logging.handlers.RotatingFileHandler
     backupCount: 7
     formatter: simple
+    maxBytes: 30000000
     filename: logs/HikLoad.log
 loggers:
   HikLoadHandler:
@@ -31,6 +32,10 @@ loggers:
     handlers: [rotatingfile]
     propagate: False
   OnedriveUtils:
+    level: DEBUG
+    handlers: [rotatingfile]
+    propagate: False
+  YoutubeUpload:
     level: DEBUG
     handlers: [rotatingfile]
     propagate: False

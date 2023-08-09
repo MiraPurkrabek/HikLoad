@@ -18,6 +18,7 @@ PARSED_KEYWORDS = [
     "endtime", 
     "cameras",
     "videoname",
+    "youtube_upload",
 ]
 # PROCESS_DEADLINE=timedelta(seconds=100)
 DELETE_DEADLINE=timedelta(days=7)
@@ -158,10 +159,11 @@ def _get_latest_arguments(
 def argfile_to_argstr(filepath, arguments_extension=ARGUMENTS_EXTENSION):
     logger.debug("Translating argfile to argstr")
     if filepath is None:
-        return None
+        return None, False
     assert filepath.endswith(arguments_extension)
 
     out_str = ""
+    youtube_upload = False
     with open(filepath, "r") as fl:
         args_dict = yaml.safe_load(fl)
         for key, value in args_dict.items():
@@ -169,12 +171,14 @@ def argfile_to_argstr(filepath, arguments_extension=ARGUMENTS_EXTENSION):
             if key in PARSED_KEYWORDS:
                 if key == "cameras":
                     out_str += "--{}={} ".format(key, value)
+                elif key == "youtube_upload" and value != '':
+                   youtube_upload = True
                 else:
                     out_str += "--{} {} ".format(key, value)
             elif value is None:
                 out_str += "--{} ".format(key)
 
-    return out_str
+    return out_str, youtube_upload
 
 
 def cleanup_old_files(

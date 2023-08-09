@@ -103,6 +103,8 @@ def parse_args():
                         # If running under PyInstaller, use the UI
                         default=bool(getattr(sys, 'frozen', False)),
                         help='enable UI interface WARNING! Requires Qt5 to be installed')
+    parser.add_argument('--youtube_', dest="trim", action=argparse.BooleanOptionalAction,
+                        help='enable triming of the concatenated video. Does work only when --concat enabled')
     args = parser.parse_args()
     return args
 
