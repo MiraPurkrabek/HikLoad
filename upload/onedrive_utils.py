@@ -42,7 +42,7 @@ def is_dst(dt, timezone="Europe/Prague"):
 
 def argname_from_response(response_name, response_extension=RESPONSE_EXTENSION, arguments_extension=ARGUMENTS_EXTENSION):
     dirname, basename = os.path.split(response_name)
-    basename = basename.replace(" ", "_").replace(response_extension, arguments_extension)
+    basename = basename.replace(" ", "_").replace("/", "_").replace("\\", "_").replace(response_extension, arguments_extension)
     return os.path.join(dirname, basename)
 
 
@@ -61,7 +61,7 @@ def parse_cameras(cameras_arr):
 def parse_onedrive_response(
     filepath,
 ):
-    with open(filepath, "r") as fl_in:
+    with open(filepath, "r", encoding='utf-8') as fl_in:
         args_dict = {
             # "skipdownload": None,
             "concat": None,
@@ -92,6 +92,9 @@ def parse_onedrive_response(
                 value = literal_eval(value)
             elif key == "videoname":
                 value = value.replace(" ", "_")
+                value = value.replace("\\", "_")
+                value = value.replace("/", "_")
+                
 
             args_dict[key] = value
         
@@ -159,6 +162,18 @@ def _get_latest_arguments(
         return files[0]
 
 
+def argfile_to_argdict(filepath, arguments_extension=ARGUMENTS_EXTENSION):
+    logger.debug("Translating argfile to argdict")
+    if filepath is None:
+        return None, False
+    assert filepath.endswith(arguments_extension)
+
+    args_dict = {}
+    with open(filepath, "r") as fl:
+        args_dict = yaml.safe_load(fl)
+        
+    return args_dict
+        
 def argfile_to_argstr(filepath, arguments_extension=ARGUMENTS_EXTENSION):
     logger.debug("Translating argfile to argstr")
     if filepath is None:

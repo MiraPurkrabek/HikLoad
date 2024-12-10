@@ -8,8 +8,9 @@ import traceback
 from copy import deepcopy
 
 from hikload.download import run, parse_args
+from hikload.send_email import send_report_email, send_failure_email, send_success_email
 from hikload.__main__ import main_ui
-from upload.onedrive_utils import parse_responses_and_return_latest, argfile_to_argstr, cleanup_old_files, upload_to_onedrive, CAMERA_TRANSLATION, ONEDRIVE_UPLOADS_FOLDER
+from upload.onedrive_utils import parse_responses_and_return_latest, argfile_to_argstr, argfile_to_argdict, cleanup_old_files, upload_to_onedrive, CAMERA_TRANSLATION, ONEDRIVE_UPLOADS_FOLDER
 # from upload.youtube import upload_to_youtube
 
 config_path = "logging_config.yml"
@@ -37,12 +38,15 @@ def main():
         cleanup_old_files(folder=ONEDRIVE_UPLOADS_FOLDER)
     except Exception as e:
         logger.exception("Old files cleaning up threw error")
+        send_report_email()
         raise e
     logger.debug("Old files cleaned up")
     
     try:
         if len(sys.argv) < 2 :
-            arg_str, youtube_upload = argfile_to_argstr(parse_responses_and_return_latest(remove_processed=True))
+            latest_response_path = parse_responses_and_return_latest(remove_processed=True)
+            response_dict = argfile_to_argdict(latest_response_path)
+            arg_str, youtube_upload = argfile_to_argstr(latest_response_path)
             if arg_str is None:
                 logger.info("No new file to process")
                 return
@@ -50,6 +54,7 @@ def main():
                 sys.argv.extend(arg_str.split())
     except Exception as e:
         logger.exception("Argfile parsing threw error")
+        send_report_email()
         raise e
                   
     logger.debug("Argfile parsed")
@@ -59,6 +64,7 @@ def main():
         args = parse_args()
     except Exception as e:
         logger.exception("Args parsing threw error")
+        send_report_email()
         raise e
 
         
@@ -99,6 +105,8 @@ def main():
         sys.exit(0)
     except Exception as e:
         logger.exception("Run threw error")
+        send_failure_email(to=response_dict['responder'], video_name=response_dict['videoname'])
+        send_report_email()
         raise e
 
     for filename in output_filenames:
@@ -106,6 +114,8 @@ def main():
             upload_to_onedrive(deepcopy(filename))
         except Exception as e:
             logger.exception("Upload to Onedrive threw error")
+            send_failure_email(to=response_dict['responder'], video_name=response_dict['videoname'])
+            send_report_email()
             raise e
 
         if youtube_upload:
@@ -125,7 +135,8 @@ def main():
             #     logger.exception("Upload to YouTube threw error")
             #     raise e
 
+    send_success_email(to=response_dict['responder'], video_name=response_dict['videoname'])
     logger.info("--- END OF THE SCRIPT ---")
-
+    
 if __name__ == "__main__":
     main()

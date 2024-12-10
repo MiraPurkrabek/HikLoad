@@ -42,6 +42,7 @@ def concat_channel_videos(channel_metadata: dict, cid, args):
         )
 
     logger.debug("Concatenating {:d} videos of channel {}".format(len(channel_metadata['filenames']), cid))
+    logger.debug("FFMPEG command: input-'{}', outname-'{}', codec copy, safe=0".format("tmp_list.txt", outname))
     try:
         (
             ffmpeg
@@ -49,20 +50,23 @@ def concat_channel_videos(channel_metadata: dict, cid, args):
             .output(outname, codec='copy')
             .overwrite_output()
             .global_args('-loglevel', 'error')
-            .run()
+            .run(capture_stderr=True)
         )
     except ffmpeg._run.Error:
         # The FFmpeg thrown error while running
         # This could be because of unsupported audio codec (or the audio is missing)
         # Try to cocatenate without the audio stream
-        (
-            ffmpeg
-            .input('tmp_list.txt', f='concat', safe=0)
-            .output(outname, vcodec='copy')
-            .overwrite_output()
-            .global_args('-loglevel', 'error')
-            .run()
-        )
+        try:
+            (
+                ffmpeg
+                .input('tmp_list.txt', f='concat', safe=0)
+                .output(outname, vcodec='copy')
+                .overwrite_output()
+                .global_args('-loglevel', 'error')
+                .run(capture_stderr=True)
+            )
+        except ffmpeg._run.Error as e:
+            logger.error("FFMpeg error: {}".format(e))
 
     # Clean up after yourself
     os.remove("tmp_list.txt")

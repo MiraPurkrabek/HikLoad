@@ -7,3 +7,4 @@ xmler
 pytz
 httplib2
 apiclient
+o365
