@@ -1,3 +1,3 @@
 @echo off
-cd %~dp0
+cd /D "%~dp0"
 python "main.py"

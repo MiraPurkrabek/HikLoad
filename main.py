@@ -42,7 +42,7 @@ def main():
     
     try:
         if len(sys.argv) < 2 :
-            arg_str, youtube_upload = argfile_to_argstr(parse_responses_and_return_latest())
+            arg_str, youtube_upload = argfile_to_argstr(parse_responses_and_return_latest(remove_processed=True))
             if arg_str is None:
                 logger.info("No new file to process")
                 return

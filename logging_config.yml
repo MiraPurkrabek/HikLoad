@@ -20,7 +20,7 @@ handlers:
     class: logging.handlers.RotatingFileHandler
     backupCount: 7
     formatter: simple
-    maxBytes: 30000000
+    maxBytes: 5000000
     filename: logs/HikLoad.log
 loggers:
   HikLoadHandler:

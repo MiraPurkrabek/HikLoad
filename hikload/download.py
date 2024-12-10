@@ -325,6 +325,8 @@ def search_for_recordings(server: hikvisionapi.HikvisionServer, args) -> List[Re
             if recording_endTime < args.starttime or recording_startTime > args.endtime:
                 continue
             
+            rec = Recording(cid=cid,cname=cname, url=i['mediaSegmentDescriptor']['playbackURI'],startTime=i['timeSpan']['startTime'],endTime=i['timeSpan']['endTime'],)
+
             rec = Recording(
                 cid=cid,
                 cname=cname,
@@ -342,9 +344,16 @@ def search_for_recordings(server: hikvisionapi.HikvisionServer, args) -> List[Re
             if not args.photos and i['mediaSegmentDescriptor']['contentType'] != 'video':
                 # This recording is not a video, skip it
                 continue
+
+        logger.debug("{:d} of recordings for camera {:s} are in the required timeframe".format(len(result), cid))
         
+        if len(result) <= 0:
+            logger.warning("No recordings found for camera {:s} in the required timeframe, skipping it!".format(cid))
+            continue
+
         # Save channel metadata
         downloadDict[cid]["recordings"].extend(result)
+        logger.debug(downloadDict)
         downloadDict[cid]["minStartTime"] = downloadDict[cid]["recordings"][0].startTime
         downloadDict["num_videos"] += downloadDict[cid]["num_videos"]
         downloadDict["num_channels"] += 1
@@ -540,12 +549,14 @@ def run(args):
         else:
             downloadDict = search_for_recordings(server, args)
 
-        downloadDict = download_recordings(server, args, downloadDict)
-        for _, channel_metadata in downloadDict.items():
-            if isinstance(channel_metadata, dict):
-                output_filenames += channel_metadata['filenames']
-        
-        if args.concat:
-            output_filenames = process_recordings_with_ffmpeg(args, downloadDict)       
+        output_filenames = []
+        if downloadDict['num_videos'] > 0:
+            downloadDict = download_recordings(server, args, downloadDict)
+            for _, channel_metadata in downloadDict.items():
+                if isinstance(channel_metadata, dict):
+                    output_filenames += channel_metadata['filenames']
+            
+            if args.concat:
+                output_filenames = process_recordings_with_ffmpeg(args, downloadDict)       
 
         return output_filenames

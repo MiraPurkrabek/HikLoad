@@ -104,6 +104,7 @@ def parse_onedrive_response(
 def parse_responses_and_return_latest(
     ONEDRIVE_COMMANDS_FOLDER=ONEDRIVE_COMMANDS_FOLDER,
     extension=RESPONSE_EXTENSION,
+    remove_processed=True,
 ):
     logger.debug("Parsing responses")
     
@@ -119,7 +120,9 @@ def parse_responses_and_return_latest(
     latest = None
     for response in responses:
         latest = parse_onedrive_response(response)
-        os.remove(response)
+
+        if remove_processed:
+            os.remove(response)
         
         # Only parse one response at a time
         break
@@ -171,8 +174,8 @@ def argfile_to_argstr(filepath, arguments_extension=ARGUMENTS_EXTENSION):
             if key in PARSED_KEYWORDS:
                 if key == "cameras":
                     out_str += "--{}={} ".format(key, value)
-                elif key == "youtube_upload" and value != '':
-                   youtube_upload = True
+                elif key == "youtube_upload":
+                   youtube_upload = value.lower() == "Ano".lower()
                 else:
                     out_str += "--{} {} ".format(key, value)
             elif value is None:
@@ -207,7 +210,7 @@ def upload_to_onedrive(file_path):
     dst = os.path.join(
         ONEDRIVE_UPLOADS_FOLDER, new_name
     )
-    shutil.copyfile(file_path, dst)
+    shutil.move(file_path, dst)
 
 
 if __name__ == "__main__":
