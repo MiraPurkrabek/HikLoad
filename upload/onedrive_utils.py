@@ -8,8 +8,8 @@ import pytz
 import logging
 
 # Has to be hardcoded because of non-unicode chars
-ONEDRIVE_COMMANDS_FOLDER="D:\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_commands"
-ONEDRIVE_UPLOADS_FOLDER="D:\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_uploads"
+ONEDRIVE_COMMANDS_FOLDER="C:\\Users\\SKV Server\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_commands"
+ONEDRIVE_UPLOADS_FOLDER="C:\\Users\\SKV Server\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_uploads"
 
 RESPONSE_EXTENSION=".resp"
 ARGUMENTS_EXTENSION=".yml"

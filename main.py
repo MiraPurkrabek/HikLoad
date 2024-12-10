@@ -10,7 +10,7 @@ from copy import deepcopy
 from hikload.download import run, parse_args
 from hikload.__main__ import main_ui
 from upload.onedrive_utils import parse_responses_and_return_latest, argfile_to_argstr, cleanup_old_files, upload_to_onedrive, CAMERA_TRANSLATION, ONEDRIVE_UPLOADS_FOLDER
-from upload.youtube import upload_to_youtube
+# from upload.youtube import upload_to_youtube
 
 config_path = "logging_config.yml"
 with open(config_path, "r") as f:
@@ -109,20 +109,21 @@ def main():
             raise e
 
         if youtube_upload:
-            try:
-                file_path = os.path.join(
-                    ROOT,
-                    "Downloads",
-                    deepcopy(filename),
-                )
-                video_name = ".".join(filename.split(".")[:-1])
-                for key, value in CAMERA_TRANSLATION.items():
-                    video_name = video_name.replace("_"+value, "_"+key)
-                video_id = upload_to_youtube(file_path, video_name)
-                logger.info("Video succesfully uploaded to YouTube with id '{}'".format(video_name, video_id))
-            except Exception as e:
-                logger.exception("Upload to YouTube threw error")
-                raise e
+            logger.warning("Upload to YouTube is disabled!")
+            # try:
+            #     file_path = os.path.join(
+            #         ROOT,
+            #         "Downloads",
+            #         deepcopy(filename),
+            #     )
+            #     video_name = ".".join(filename.split(".")[:-1])
+            #     for key, value in CAMERA_TRANSLATION.items():
+            #         video_name = video_name.replace("_"+value, "_"+key)
+            #     video_id = upload_to_youtube(file_path, video_name)
+            #     logger.info("Video succesfully uploaded to YouTube with id '{}'".format(video_name, video_id))
+            # except Exception as e:
+            #     logger.exception("Upload to YouTube threw error")
+            #     raise e
 
     logger.info("--- END OF THE SCRIPT ---")
 

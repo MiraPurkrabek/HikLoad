@@ -1,0 +1,9 @@
+pyyaml
+ffmpeg-python
+tqdm
+requests
+lxml
+xmler
+pytz
+httplib2
+apiclient
