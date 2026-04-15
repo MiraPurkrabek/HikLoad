@@ -109,10 +109,10 @@ def send_failure_email(to, body=None, video_name=None):
 def send_success_email(to, body=None, video_name=None):
     
     if body is None:
-        body = "Your video '{:s}' is ready. ".format(video_name)
+        body = "Your video '{:s}' is ready. \n\n".format(video_name)
         body += "Download it at: "
         body += "https://sokolvinohrady-my.sharepoint.com/:f:/g/personal/robot_skv_01_skvflorbal_cz/Emm_27OYqjpFjM0jF9sFQSkBDubvdEIq1TJKbAoNjgN8cA?e=ZWS2EV"
-        body += "\nThe video will be available for 7 days. After that it will be automatically deleted."
+        body += "\n\nThe video will be available for 7 days. After that it will be automatically deleted."
     
     send_email(
         to = to,
@@ -120,6 +120,32 @@ def send_success_email(to, body=None, video_name=None):
         body = body,
         subject="[SKV Server] Video ready"
     )
+    
+def send_no_recordings_email(to, body=None, video_name=None):
+    if body is None:
+        body = "You attempted to download video '{:s}' but no recordings were found. \n".format(video_name)
+        body += "All videos are deleted after 30 days. Did you try to download older video? Of not, please contact Mira."
+    
+    send_email(
+        to = to,
+        bcc = developer_email,
+        body = body,
+        subject="[SKV Server] Video not found"
+    )
+
+
+def send_parse_failure_email(to, body=None):
+    if body is None:
+        body = "Your command was not parsed, probably due to some unexpected characters or invalid format. Please try again. If the problem persists, contact support."
+
+    send_email(
+        to=to,
+        bcc=developer_email,
+        body=body,
+        subject="[SKV Server] Command parsing failed"
+    )
+    
+    
 
 
 if __name__ == "__main__":

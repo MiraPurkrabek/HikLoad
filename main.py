@@ -8,9 +8,9 @@ import traceback
 from copy import deepcopy
 
 from hikload.download import run, parse_args
-from hikload.send_email import send_report_email, send_failure_email, send_success_email
+from hikload.send_email import send_report_email, send_failure_email, send_success_email, send_no_recordings_email, send_parse_failure_email
 from hikload.__main__ import main_ui
-from upload.onedrive_utils import parse_responses_and_return_latest, argfile_to_argstr, argfile_to_argdict, cleanup_old_files, upload_to_onedrive, CAMERA_TRANSLATION, ONEDRIVE_UPLOADS_FOLDER
+from upload.onedrive_utils import ResponseParseError, parse_responses_and_return_latest, argfile_to_argstr, argfile_to_argdict, cleanup_old_files, upload_to_onedrive, copy_file_to_harddisk, CAMERA_TRANSLATION, ONEDRIVE_UPLOADS_FOLDER
 # from upload.youtube import upload_to_youtube
 
 config_path = "logging_config.yml"
@@ -39,19 +39,28 @@ def main():
     except Exception as e:
         logger.exception("Old files cleaning up threw error")
         send_report_email()
+        
         raise e
     logger.debug("Old files cleaned up")
     
+    arg_str, youtube_upload, harddisk_save = None, False, False
+    response_dict = None
     try:
         if len(sys.argv) < 2 :
             latest_response_path = parse_responses_and_return_latest(remove_processed=True)
             response_dict = argfile_to_argdict(latest_response_path)
-            arg_str, youtube_upload = argfile_to_argstr(latest_response_path)
+            arg_str, youtube_upload, harddisk_save = argfile_to_argstr(latest_response_path)
             if arg_str is None:
                 logger.info("No new file to process")
                 return
             else:
                 sys.argv.extend(arg_str.split())
+    except ResponseParseError as e:
+        logger.exception("Argfile parsing threw error for response '%s'", e.response_path)
+        if e.responder:
+            send_parse_failure_email(to=e.responder)
+        send_report_email()
+        raise e
     except Exception as e:
         logger.exception("Argfile parsing threw error")
         send_report_email()
@@ -59,6 +68,7 @@ def main():
                   
     logger.debug("Argfile parsed")
     logger.debug("YouTube upload: {}".format(youtube_upload))
+    logger.debug("Will save to external hard disk? {}".format(harddisk_save))
 
     try:
         args = parse_args()
@@ -108,34 +118,52 @@ def main():
         send_failure_email(to=response_dict['responder'], video_name=response_dict['videoname'])
         send_report_email()
         raise e
+    
+    if len(output_filenames) == 0:
+        send_no_recordings_email(to=response_dict['responder'], video_name=response_dict['videoname'])
+        logger.warning("No videos found email sent, finishing the script")
+        
+    else:
+        for filename in output_filenames:
+            # First save to harddisk as this function use shutil.copyfile
+            try:
+                if harddisk_save:
+                    copy_file_to_harddisk(filename)
+            except Exception as e:
+                logger.exception("Copying to harddisk threw error")
+                send_failure_email(to=response_dict['responder'], video_name=response_dict['videoname'])
+                send_report_email()
+                raise e
+            
+            # Then upload to OneDrive as it takes longer and the function uses shutil.move for automatic cleanup
+            try:
+                upload_to_onedrive(deepcopy(filename))
+            except Exception as e:
+                logger.exception("Upload to Onedrive threw error")
+                send_failure_email(to=response_dict['responder'], video_name=response_dict['videoname'])
+                send_report_email()
+                raise e
+            
 
-    for filename in output_filenames:
-        try:
-            upload_to_onedrive(deepcopy(filename))
-        except Exception as e:
-            logger.exception("Upload to Onedrive threw error")
-            send_failure_email(to=response_dict['responder'], video_name=response_dict['videoname'])
-            send_report_email()
-            raise e
-
-        if youtube_upload:
-            logger.warning("Upload to YouTube is disabled!")
-            # try:
-            #     file_path = os.path.join(
-            #         ROOT,
-            #         "Downloads",
-            #         deepcopy(filename),
-            #     )
-            #     video_name = ".".join(filename.split(".")[:-1])
-            #     for key, value in CAMERA_TRANSLATION.items():
-            #         video_name = video_name.replace("_"+value, "_"+key)
-            #     video_id = upload_to_youtube(file_path, video_name)
-            #     logger.info("Video succesfully uploaded to YouTube with id '{}'".format(video_name, video_id))
-            # except Exception as e:
-            #     logger.exception("Upload to YouTube threw error")
-            #     raise e
-
-    send_success_email(to=response_dict['responder'], video_name=response_dict['videoname'])
+            if youtube_upload:
+                logger.warning("Upload to YouTube is disabled!")
+                # try:
+                #     file_path = os.path.join(
+                #         ROOT,
+                #         "Downloads",
+                #         deepcopy(filename),
+                #     )
+                #     video_name = ".".join(filename.split(".")[:-1])
+                #     for key, value in CAMERA_TRANSLATION.items():
+                #         video_name = video_name.replace("_"+value, "_"+key)
+                #     video_id = upload_to_youtube(file_path, video_name)
+                #     logger.info("Video succesfully uploaded to YouTube with id '{}'".format(video_name, video_id))
+                # except Exception as e:
+                #     logger.exception("Upload to YouTube threw error")
+                #     raise e
+        send_success_email(to=response_dict['responder'], video_name=response_dict['videoname'])
+    
+    
     logger.info("--- END OF THE SCRIPT ---")
     
 if __name__ == "__main__":

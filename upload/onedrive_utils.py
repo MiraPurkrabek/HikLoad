@@ -1,5 +1,7 @@
 import sys
 import os
+import unicodedata
+import re
 import shutil
 from ast import literal_eval
 import yaml
@@ -10,6 +12,7 @@ import logging
 # Has to be hardcoded because of non-unicode chars
 ONEDRIVE_COMMANDS_FOLDER="C:\\Users\\SKV Server\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_commands"
 ONEDRIVE_UPLOADS_FOLDER="C:\\Users\\SKV Server\\OneDrive - TJ Sokol Královské Vinohrady\\HikLoad_uploads"
+HARDDISK_PATH="D:\\Floorball_SKV_data\\automatic_save"
 
 RESPONSE_EXTENSION=".resp"
 ARGUMENTS_EXTENSION=".yml"
@@ -29,10 +32,34 @@ CAMERA_TRANSLATION = {
     "WEST": "301",
     "NORTH": "401",
     "TOP": "501",
+    "GYM": "601",
 }
 
 logger = logging.getLogger("OnedriveUtils")
 
+
+class ResponseParseError(Exception):
+    def __init__(self, response_path, processed_path, responder, original_exception, recovered_fields=None):
+        self.response_path = response_path
+        self.processed_path = processed_path
+        self.responder = responder
+        self.original_exception = original_exception
+        self.recovered_fields = recovered_fields or {}
+        super().__init__("Failed to parse response '{}'".format(response_path))
+
+
+def clean_input_string(input_str: str) -> str:
+    # Normalize text to ASCII (č -> c)
+    normalized = unicodedata.normalize('NFKC', input_str)
+    ascii_str = normalized.encode('ascii', 'ignore').decode('ascii')
+
+    # Replace any unsafe chars with underscore
+    safe_str = re.sub(r'[^A-Za-z0-9_-]+', '_', ascii_str)
+    
+    # Remove trailing ans leading "_"
+    safe_str = safe_str.strip("_")
+    
+    return safe_str
 
 def is_dst(dt, timezone="Europe/Prague"):
     timezone = pytz.timezone(timezone)
@@ -58,16 +85,34 @@ def parse_cameras(cameras_arr):
     return ",".join(literal_eval(cameras_arr))
 
 
+def extract_raw_response_fields(raw_response: str):
+    recovered_fields = {}
+    for line in raw_response.splitlines():
+        if "?" not in line:
+            continue
+        key, value = line.strip().split("?", 1)
+        if key == "":
+            continue
+        recovered_fields[key.lower()] = value
+    return recovered_fields
+
+
 def parse_onedrive_response(
     filepath,
 ):
+    out_filepath = argname_from_response(filepath)
     with open(filepath, "r", encoding='utf-8') as fl_in:
+        raw_response = fl_in.read()
+
+    recovered_fields = extract_raw_response_fields(raw_response)
+
+    try:
         args_dict = {
             # "skipdownload": None,
             "concat": None,
             "trim": None,
         }
-        for line in fl_in.readlines():
+        for line in raw_response.splitlines():
             key, value = line.strip().split("?")
             key = key.lower()
 
@@ -91,16 +136,35 @@ def parse_onedrive_response(
             elif key == "upload" and value != "":
                 value = literal_eval(value)
             elif key == "videoname":
-                value = value.replace(" ", "_")
-                value = value.replace("\\", "_")
-                value = value.replace("/", "_")
-                
+                value = clean_input_string(value)
+            elif key == "official":
+                value = value != '' and ("Ano" in parse_cameras(value))
 
             args_dict[key] = value
-        
-        out_filepath = argname_from_response(filepath)
-        with open(out_filepath, "w") as fl_out:
+
+        with open(out_filepath, "w", encoding='utf-8') as fl_out:
             yaml.safe_dump(args_dict, fl_out, indent=2)
+    except Exception as e:
+        failure_dict = {
+            "parse_failed": True,
+            "parse_error": str(e),
+            "raw_response": raw_response,
+        }
+        for key, value in recovered_fields.items():
+            if key not in failure_dict:
+                failure_dict[key] = value
+
+        with open(out_filepath, "w", encoding='utf-8') as fl_out:
+            yaml.safe_dump(failure_dict, fl_out, indent=2)
+
+        raise ResponseParseError(
+            response_path=filepath,
+            processed_path=out_filepath,
+            responder=recovered_fields.get("responder"),
+            original_exception=e,
+            recovered_fields=recovered_fields,
+        ) from e
+
     return out_filepath
 
 
@@ -122,11 +186,26 @@ def parse_responses_and_return_latest(
 
     latest = None
     for response in responses:
-        latest = parse_onedrive_response(response)
-
-        if remove_processed:
-            os.remove(response)
+        parse_exception = None
+        remove_exception = None
+        try:
+            latest = parse_onedrive_response(response)
+        except Exception as e:
+            parse_exception = e
+        finally:
+            if remove_processed and os.path.exists(response):
+                try:
+                    os.remove(response)
+                except Exception as e:
+                    remove_exception = e
         
+        if parse_exception is not None:
+            if remove_exception is not None:
+                logger.error("Failed to remove processed response '%s': %s", response, remove_exception)
+            raise parse_exception
+        if remove_exception is not None:
+            raise remove_exception
+
         # Only parse one response at a time
         break
         
@@ -177,17 +256,29 @@ def argfile_to_argdict(filepath, arguments_extension=ARGUMENTS_EXTENSION):
 def argfile_to_argstr(filepath, arguments_extension=ARGUMENTS_EXTENSION):
     logger.debug("Translating argfile to argstr")
     if filepath is None:
-        return None, False
+        return None, False, False
     assert filepath.endswith(arguments_extension)
 
     out_str = ""
     youtube_upload = False
+    harddisk_save = False
     with open(filepath, "r") as fl:
         args_dict = yaml.safe_load(fl)
+        
+        # Need to know if harddisk save before processing cameras
+        if "official" in args_dict.keys():
+            harddisk_save = args_dict["official"]
+        
         for key, value in args_dict.items():
             key = key.lower()
             if key in PARSED_KEYWORDS:
                 if key == "cameras":
+                    
+                    if harddisk_save:
+                        # Save all cameras
+                        value = "EAST,SOUTH,WEST,NORTH,TOP"
+                        # value = parse_cameras(CAMERA_TRANSLATION.keys())
+                    
                     out_str += "--{}={} ".format(key, value)
                 elif key == "youtube_upload":
                    youtube_upload = value.lower() == "Ano".lower()
@@ -196,7 +287,7 @@ def argfile_to_argstr(filepath, arguments_extension=ARGUMENTS_EXTENSION):
             elif value is None:
                 out_str += "--{} ".format(key)
 
-    return out_str, youtube_upload
+    return out_str, youtube_upload, harddisk_save
 
 
 def cleanup_old_files(
@@ -226,6 +317,21 @@ def upload_to_onedrive(file_path):
         ONEDRIVE_UPLOADS_FOLDER, new_name
     )
     shutil.move(file_path, dst)
+    
+
+def copy_file_to_harddisk(file_path):
+    logger.debug("Copying '{:s}' to external hard disk".format(file_path))
+    today_date = datetime.today().strftime('%Y-%m-%d')
+    new_folder = os.path.join(HARDDISK_PATH, today_date)
+    os.makedirs(new_folder, exist_ok=True)
+    
+    new_name = os.path.basename(file_path)
+    # Translate channel IDs to camera names
+    for camera_name, cid in CAMERA_TRANSLATION.items():
+        new_name = new_name.replace("_"+cid, "_"+camera_name[0])
+    dst_path = os.path.join(new_folder, new_name)
+    
+    shutil.copyfile(file_path, dst_path)    
 
 
 if __name__ == "__main__":
