@@ -3,6 +3,7 @@
 ## Document status
 
 - This document describes a proposed architecture.
+- Parts of the architecture are now implemented in a Task Scheduler-driven form.
 - It is intentionally broader than an implementation checklist.
 - It is written for developers and operators who will design, implement, deploy, and maintain the system.
 - It does not prescribe exact code.
@@ -15,6 +16,77 @@
 - A scheduled task launches HikLoad periodically.
 - HikLoad parses commands, downloads video, uploads outputs, and sends emails.
 - The proposed architecture changes process structure without changing the essential user-facing purpose of the application.
+
+## Current implemented scheduler model
+
+- The currently implemented design uses two Microsoft Task Scheduler tasks:
+- `HikLoad Supervisor`
+- `HikLoad Worker`
+- Only `HikLoad Supervisor` is time-triggered.
+- `HikLoad Worker` is on-demand only and has no periodic trigger of its own.
+- The Supervisor no longer launches the Worker with `subprocess.Popen(...)`.
+- Instead, the Supervisor queries Task Scheduler for the current state of `HikLoad Worker` and requests `schtasks /run /tn "HikLoad Worker"` only when:
+- queued work exists, and
+- the Worker task is not already active.
+- The Worker task is configured in Task Scheduler with:
+- `If the task is already running`: `Do not start a new instance`
+- `Stop the task if it runs longer than`: `4 hours`
+- `If the running task does not end when requested, force it to stop`: enabled
+- In this implemented model, Task Scheduler owns:
+- Worker lifetime isolation from the Supervisor task
+- Worker overlap prevention
+- the hard 4-hour execution limit
+- In this implemented model, the Supervisor owns:
+- response intake
+- queue registration
+- parse-failure handling
+- user registration emails with ETA
+- stale local `running` job reconciliation after the Worker task is no longer active
+- triggering the on-demand Worker task when queued work exists
+- Operators should therefore think of the system as:
+- one timer-driven Supervisor task
+- one callable Worker task
+- not as one scheduled task that directly spawns a child process
+
+## Current Task Scheduler registration
+
+### Task names
+
+- `HikLoad Supervisor`
+- `HikLoad Worker`
+
+### `HikLoad Supervisor`
+
+- Purpose: periodic intake, queue maintenance, and Worker triggering
+- Trigger: every 1 minute
+- Action: `C:\appl\HikLoad\run_main.bat`
+- Windows account: the same account currently used by HikLoad and OneDrive on the server
+- Settings:
+- `Allow task to be run on demand`: enabled
+- `If the task is already running`: `Do not start a new instance`
+- Conditions:
+- mirror the existing working deployment so OneDrive/profile access remains unchanged
+
+### `HikLoad Worker`
+
+- Purpose: on-demand heavy processing of one queued job
+- Trigger: none required
+- Action: `C:\appl\HikLoad\run_worker.bat`
+- Windows account: the same account as `HikLoad Supervisor`
+- Settings:
+- `Allow task to be run on demand`: enabled
+- `If the task is already running`: `Do not start a new instance`
+- `Stop the task if it runs longer than`: `4 hours`
+- `If the running task does not end when requested, force it to stop`: enabled
+- Conditions:
+- mirror Supervisor unless there is a deliberate operational reason not to
+
+### Current Worker trigger rule
+
+- On each Supervisor tick, the Supervisor queries the state of `HikLoad Worker`.
+- If the Worker task is `Running` or `Queued`, the Supervisor does not request another run.
+- If the Worker task is not active and the local queue is non-empty, the Supervisor requests a single on-demand run of `HikLoad Worker`.
+- The Worker then auto-claims the oldest queued local job and processes exactly one job before exiting.
 
 ## Audience
 
@@ -114,7 +186,8 @@
 - A user should not need to infer queue progress from silence.
 - Heavy work should remain sequential by default.
 - Intake should continue every minute even while a worker is busy.
-- Only one scheduled task should need to be maintained in Microsoft Task Scheduler.
+- Only one Task Scheduler task should be time-triggered.
+- A second Worker task may exist as an on-demand callable endpoint.
 - The system should avoid duplicate processing.
 - The system should fail safely when parsing fails, when the worker crashes, or when the NVR is unavailable.
 
@@ -253,9 +326,10 @@
 
 ### Operational requirements
 
-- Only one Microsoft Task Scheduler job should need to exist.
-- The scheduled task should remain simple to understand and support.
-- The system should not require operators to remember multiple independently scheduled components.
+- Only one Microsoft Task Scheduler task should be time-triggered.
+- A second Worker task may exist, but only as an on-demand callable task.
+- The scheduled setup should remain simple to understand and support.
+- The system should not require operators to remember multiple independently timed components.
 - The system should be restartable without manual queue repair in common failure cases.
 - The queue state should be inspectable from files or simple logs.
 - A developer should be able to determine the current queue contents without attaching a debugger.
@@ -2550,7 +2624,7 @@
 ### Operator documentation requirement
 
 - Update README or deployment docs so operators understand:
-- one scheduled task.
+- one time-triggered Supervisor task and one on-demand Worker task.
 - one entrypoint.
 - internal worker lifecycle.
 - locations of queue state and logs.
@@ -2646,17 +2720,17 @@
 
 ## Recommended initial architecture summary
 
-- Keep one Microsoft Task Scheduler task.
+- Keep one time-triggered Microsoft Task Scheduler task plus one on-demand Worker task.
 - Keep one operational entrypoint.
 - Default entrypoint role is supervisor.
 - Supervisor runs every minute and exits quickly.
-- Supervisor owns inbound `.resp` discovery, stability check, parse, durable queue import, registration email, and worker spawn decision.
-- Worker is an internal role spawned by the supervisor.
-- Worker drains queued jobs sequentially and exits on empty queue.
+- Supervisor owns inbound `.resp` discovery, parse, durable queue import, registration email, and Worker task trigger decisions.
+- Worker is an internal role launched as its own on-demand Task Scheduler task.
+- Worker processes queued jobs sequentially, one job per task run.
 - Queue state lives locally, not in OneDrive.
 - `.resp` is intake source only.
 - Durable `.yml` job records or equivalent local artifacts become the queue source of truth.
-- Internal locks and heartbeats control concurrency.
+- Task Scheduler task settings plus internal queue/runtime state control concurrency.
 - Worker state includes PID, `started_at`, worker instance id, and heartbeat.
 - Later supervisor runs under the same Windows account may terminate an overlong worker after verifying those identity fields.
 - Version one uses a hard worker wall-clock timeout of 4 hours.

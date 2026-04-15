@@ -65,6 +65,72 @@ options:
 
 The DVR/NVR needs to have ISAPI and RTSP enabled in System/Security and H264+ disabled for every camera.
 
+## Scheduled server deployment
+
+The Microsoft Forms / OneDrive automation now runs in two Task Scheduler tasks:
+
+- `HikLoad Supervisor`
+- `HikLoad Worker`
+
+Only `HikLoad Supervisor` is time-triggered. It runs every minute, imports new `.resp` commands into the local queue, sends parse-failure or registration emails, and triggers `HikLoad Worker` on demand when queued work exists.
+
+`HikLoad Worker` is not scheduled on its own. It is an on-demand task that runs `main.py --role worker`, auto-claims the oldest queued job, processes exactly one command, and exits.
+
+### Batch wrappers
+
+- Supervisor wrapper: [run_main.bat](run_main.bat)
+- Worker wrapper: [run_worker.bat](run_worker.bat)
+
+Both wrappers first switch into the project directory, which keeps relative paths and OneDrive-related behavior consistent under Task Scheduler.
+
+### Task Scheduler registration
+
+Register these exact tasks unless you intentionally choose a different naming scheme and update the code constant in `hikload/task_scheduler.py`.
+
+#### `HikLoad Supervisor`
+
+- Purpose: periodic intake, queue maintenance, and Worker trigger.
+- Trigger: every 1 minute.
+- Action: `C:\appl\HikLoad\run_main.bat`
+- Account: the same Windows account that currently works with the HikLoad OneDrive sync and credentials.
+- Settings:
+- `Allow task to be run on demand`: enabled
+- `If the task is already running`: `Do not start a new instance`
+- Conditions:
+- mirror the current working deployment so access to OneDrive and the local profile stays unchanged
+
+#### `HikLoad Worker`
+
+- Purpose: on-demand heavy processing of one queued job.
+- Trigger: none required.
+- Action: `C:\appl\HikLoad\run_worker.bat`
+- Account: the same Windows account as `HikLoad Supervisor`
+- Settings:
+- `Allow task to be run on demand`: enabled
+- `If the task is already running`: `Do not start a new instance`
+- `Stop the task if it runs longer than`: `4 hours`
+- `If the running task does not end when requested, force it to stop`: enabled
+- Conditions:
+- mirror Supervisor unless there is a specific reason not to
+
+### How the Supervisor uses the Worker task
+
+- Supervisor queries the Task Scheduler state of `HikLoad Worker`.
+- If the Worker task state is `Running` or `Queued`, Supervisor does nothing.
+- If the Worker task is not active and the local queue is non-empty, Supervisor requests `schtasks /run /tn "HikLoad Worker"`.
+- Task Scheduler's `Do not start a new instance` setting is the final safety net against duplicate Workers.
+
+### Manual debugging
+
+You can still run the Worker directly from a terminal for debugging:
+
+```powershell
+python main.py --role worker
+python main.py --role worker --job-id <job_id>
+```
+
+The first command auto-claims the oldest queued job. The second command targets one specific queued job.
+
 ## Installing and running the script
 
 You can install the script from [PyPi](https://pypi.org/project/hikload/), run the script directly from the source, or use the Docker image:

@@ -12,3 +12,4 @@ passwords/email.yml
 passwords/*.json
 *.log
 logs/
+state/

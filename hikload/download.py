@@ -16,8 +16,30 @@ import hikload.hikvisionapi as hikvisionapi
 from hikload.hikvisionapi.classes import HikvisionException
 
 from hikload.video import concat_channel_videos, cut_video
+from upload.onedrive_utils import CAMERA_TRANSLATION
 
 logger = logging.getLogger('hikload')
+CHANNEL_METADATA_KEYS = {"num_videos", "num_channels"}
+REVERSE_CAMERA_TRANSLATION = {str(value): key for key, value in CAMERA_TRANSLATION.items()}
+
+
+def _get_progress_output_stream():
+    for stream in (sys.stderr, sys.stdout):
+        if stream is None:
+            continue
+        if getattr(stream, "closed", False):
+            continue
+        if hasattr(stream, "write"):
+            return stream
+    return None
+
+
+def _build_tqdm_kwargs(total):
+    stream = _get_progress_output_stream()
+    if stream is None:
+        logger.debug("No console stream is available; disabling tqdm progress bars")
+        return {"total": total, "disable": True}
+    return {"total": total, "file": stream}
 
 class Recording():
     def __init__(self, cid, cname, url, startTime, endTime=None):
@@ -40,7 +62,7 @@ class Recording():
         return "{}-{}".format(self.cname, self.startTime)
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description='Download Recordings from a HikVision server, from a range interval')
     parser.add_argument('--server', type=str, dest="server",
@@ -105,7 +127,7 @@ def parse_args():
                         help='enable UI interface WARNING! Requires Qt5 to be installed')
     parser.add_argument('--youtube_', dest="trim", action=argparse.BooleanOptionalAction,
                         help='enable triming of the concatenated video. Does work only when --concat enabled')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     return args
 
 
@@ -312,6 +334,8 @@ def search_for_recordings(server: hikvisionapi.HikvisionServer, args) -> List[Re
             "endTime": endtime.isoformat() + "Z",
             "minStartTime": None,
             "recordings": [],
+            "processing_seconds": 0.0,
+            "camera_name": REVERSE_CAMERA_TRANSLATION.get(str(cid), str(cid)),
         }
 
         result = []
@@ -465,12 +489,14 @@ def download_recordings(server: hikvisionapi.HikvisionServer, args, downloadDict
         create_folder_and_chdir(args.downloads)
     original_path = os.path.abspath(os.getcwd())
 
-    print("Downloading recordings...")
-    with tqdm.tqdm(total=downloadDict["num_videos"]) as progress_bar:
+    logger.info("Downloading recordings...")
+    with tqdm.tqdm(**_build_tqdm_kwargs(downloadDict["num_videos"])) as progress_bar:
         for cid, channel_metadata in downloadDict.items():
             try:
                 for recordingobj in channel_metadata["recordings"]:
+                    recording_start = time.perf_counter()
                     filename = download_recording(server, args, recordingobj, original_path)
+                    channel_metadata["processing_seconds"] += time.perf_counter() - recording_start
                     downloadDict[cid]["filenames"].append(filename)
                     progress_bar.update()
             except TypeError:
@@ -502,22 +528,37 @@ def process_recordings_with_ffmpeg(args, downloadDict: dict):
   
     logger.info("Concatenating videos..")
     output_filenames = []
-    with tqdm.tqdm(total=downloadDict["num_channels"]) as progress_bar:
+    with tqdm.tqdm(**_build_tqdm_kwargs(downloadDict["num_channels"])) as progress_bar:
         for cid, channel_metadata in downloadDict.items():
             if not isinstance(channel_metadata, dict):
                 continue
 
+            ffmpeg_start = time.perf_counter()
             out_filename = concat_channel_videos(channel_metadata, cid, args)
 
             if args.trim:
                 out_filename = cut_video(out_filename, channel_metadata)
+            channel_metadata["processing_seconds"] += time.perf_counter() - ffmpeg_start
             
             output_filenames.append(out_filename)
             progress_bar.update()
 
     return output_filenames
 
-def run(args):
+
+def extract_camera_processing_seconds(downloadDict: dict):
+    camera_processing_seconds = {}
+    for cid, channel_metadata in downloadDict.items():
+        if cid in CHANNEL_METADATA_KEYS or not isinstance(channel_metadata, dict):
+            continue
+
+        camera_name = str(channel_metadata.get("camera_name") or REVERSE_CAMERA_TRANSLATION.get(str(cid), str(cid))).upper()
+        runtime_seconds = float(channel_metadata.get("processing_seconds") or 0.0)
+        camera_processing_seconds[camera_name] = camera_processing_seconds.get(camera_name, 0.0) + runtime_seconds
+
+    return camera_processing_seconds
+
+def run(args, include_metrics=False):
     if args.server == "" or args.server == None:
         raise HikvisionException(
             "No server specified! You need to specify a server with --server")
@@ -550,6 +591,7 @@ def run(args):
             downloadDict = search_for_recordings(server, args)
 
         output_filenames = []
+        camera_processing_seconds = {}
         if downloadDict['num_videos'] > 0:
             downloadDict = download_recordings(server, args, downloadDict)
             for _, channel_metadata in downloadDict.items():
@@ -558,5 +600,12 @@ def run(args):
             
             if args.concat:
                 output_filenames = process_recordings_with_ffmpeg(args, downloadDict)       
+            camera_processing_seconds = extract_camera_processing_seconds(downloadDict)
+
+        if include_metrics:
+            return {
+                "output_filenames": output_filenames,
+                "camera_processing_seconds": camera_processing_seconds,
+            }
 
         return output_filenames

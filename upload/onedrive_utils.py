@@ -295,6 +295,8 @@ def cleanup_old_files(
     deadline=DELETE_DEADLINE
 ):
     logger.debug("Cleaning up old files in folder '{:s}' with deadline {}".format(folder, deadline))
+    if not os.path.isdir(folder):
+        return
     for f in os.listdir(folder):
         f_path = os.path.join(folder, f)
         if os.path.isfile(f_path):

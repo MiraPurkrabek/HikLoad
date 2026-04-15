@@ -9,41 +9,66 @@ handlers:
     level: NOTSET
     formatter: simple
     stream: ext://sys.stdout
-  logfile:
+  supervisor_logfile:
     level: NOTSET
     class: logging.FileHandler
     formatter: simple
-    filename: logs/latest.log
+    filename: logs/supervisor/latest.log
     mode: w
-  rotatingfile:
+  supervisor_rotatingfile:
     level: NOTSET
     class: logging.handlers.RotatingFileHandler
     backupCount: 7
     formatter: simple
     maxBytes: 5000000
-    filename: logs/HikLoad.log
+    filename: logs/supervisor/HikLoadSupervisor.log
+  worker_logfile:
+    level: NOTSET
+    class: logging.FileHandler
+    formatter: simple
+    filename: logs/worker/latest.log
+    mode: w
+  worker_rotatingfile:
+    level: NOTSET
+    class: logging.handlers.RotatingFileHandler
+    backupCount: 7
+    formatter: simple
+    maxBytes: 5000000
+    filename: logs/worker/HikLoadWorker.log
 loggers:
+  HikLoadSupervisor:
+    level: DEBUG
+    handlers: [supervisor_rotatingfile, supervisor_logfile]
+    propagate: False
+  HikLoadWorker:
+    level: DEBUG
+    handlers: [supervisor_rotatingfile, supervisor_logfile]
+    propagate: False
+  QueueRuntime:
+    level: DEBUG
+    handlers: [supervisor_rotatingfile, supervisor_logfile]
+    propagate: False
   HikLoadHandler:
     level: DEBUG
-    handlers: [rotatingfile, logfile]
+    handlers: [supervisor_rotatingfile, supervisor_logfile]
     propagate: False
   VideoHandler:
     level: DEBUG
-    handlers: [rotatingfile, logfile]
+    handlers: [supervisor_rotatingfile, supervisor_logfile]
     propagate: False
   OnedriveUtils:
     level: DEBUG
-    handlers: [rotatingfile, logfile]
+    handlers: [supervisor_rotatingfile, supervisor_logfile]
     propagate: False
   YoutubeUpload:
     level: DEBUG
-    handlers: [rotatingfile, logfile]
+    handlers: [supervisor_rotatingfile, supervisor_logfile]
     propagate: False
   EmailSender:
     level: DEBUG
-    handlers: [rotatingfile, logfile]
+    handlers: [supervisor_rotatingfile, supervisor_logfile]
     propagate: False
   hikload:
     level: DEBUG
-    handlers: [rotatingfile, logfile]
+    handlers: [supervisor_rotatingfile, supervisor_logfile]
     propagate: False
